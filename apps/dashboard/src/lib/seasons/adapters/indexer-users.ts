@@ -1,7 +1,9 @@
 import prismaIndexer from "@/lib/prisma-indexer"
-import prisma from "@/lib/prisma"
+import turso from "@/lib/turso"
 import { getUsersMetadata } from "../enrichment/users"
 import { Decimal } from "@prisma/client/runtime/library"
+import { getS1UserPointsByFid, getS1UserPointsMap } from "../s1-baseline"
+import assert from "node:assert"
 
 const BRND_DECIMALS = BigInt(18)
 const BRND_SCALE = BigInt(10) ** BRND_DECIMALS
@@ -23,6 +25,114 @@ function normalizeIndexerPoints(raw: Decimal | number | null | undefined): numbe
 
   const frac = value % BRND_SCALE
   return Number(whole) + Number(frac) / 1e18
+}
+
+const MATERIALIZED_TTL_MS = 60_000
+const USERS_ALLTIME_CACHE_KEY = "leaderboard:users:alltime:v1"
+
+let isUsersLeaderboardSchemaReady = false
+let refreshUsersLeaderboardPromise: Promise<void> | null = null
+
+const ensureUsersLeaderboardSchema = async (): Promise<void> => {
+  if (isUsersLeaderboardSchemaReady) return
+
+  await turso.execute(`
+    CREATE TABLE IF NOT EXISTS leaderboard_materialization_meta (
+      key TEXT PRIMARY KEY,
+      expiresAtMs INTEGER NOT NULL,
+      updatedAtMs INTEGER NOT NULL
+    )
+  `)
+
+  await turso.execute(`
+    CREATE TABLE IF NOT EXISTS leaderboard_users_alltime (
+      fid INTEGER PRIMARY KEY,
+      points REAL NOT NULL,
+      pointsS1 REAL NOT NULL,
+      pointsS2 REAL NOT NULL,
+      updatedAtMs INTEGER NOT NULL
+    )
+  `)
+
+  await turso.execute(
+    "CREATE INDEX IF NOT EXISTS idx_leaderboard_users_alltime_points ON leaderboard_users_alltime (points)"
+  )
+
+  isUsersLeaderboardSchemaReady = true
+}
+
+const refreshUsersLeaderboardMaterialized = async (nowMs: number): Promise<void> => {
+  const [leaderboardRows, s1PointsMap] = await Promise.all([
+    prismaIndexer.indexerAllTimeUserLeaderboard.findMany({
+      select: { fid: true, points: true },
+    }),
+    getS1UserPointsMap(),
+  ])
+
+  await turso.execute("DELETE FROM leaderboard_users_alltime")
+
+  const chunkSize = 200
+  const updatedAtMs = nowMs
+
+  for (let i = 0; i < leaderboardRows.length; i += chunkSize) {
+    const chunk = leaderboardRows.slice(i, i + chunkSize)
+
+    const valuesSql = chunk.map(() => "(?, ?, ?, ?, ?)").join(",")
+    const args = chunk.flatMap((row) => {
+      const pointsS1 = s1PointsMap.get(row.fid) ?? 0
+      const pointsS2 = normalizeIndexerPoints(row.points)
+      const points = pointsS1 + pointsS2
+
+      return [row.fid, points, pointsS1, pointsS2, updatedAtMs]
+    })
+
+    await turso.execute({
+      sql: `INSERT INTO leaderboard_users_alltime (fid, points, pointsS1, pointsS2, updatedAtMs)
+            VALUES ${valuesSql}
+            ON CONFLICT(fid) DO UPDATE SET points=excluded.points, pointsS1=excluded.pointsS1, pointsS2=excluded.pointsS2, updatedAtMs=excluded.updatedAtMs`,
+      args,
+    })
+  }
+
+  const expiresAtMs = nowMs + MATERIALIZED_TTL_MS
+  await turso.execute({
+    sql: `INSERT INTO leaderboard_materialization_meta (key, expiresAtMs, updatedAtMs)
+          VALUES (?, ?, ?)
+          ON CONFLICT(key) DO UPDATE SET expiresAtMs=excluded.expiresAtMs, updatedAtMs=excluded.updatedAtMs`,
+    args: [USERS_ALLTIME_CACHE_KEY, expiresAtMs, nowMs],
+  })
+}
+
+const ensureUsersLeaderboardMaterialized = async (): Promise<void> => {
+  await ensureUsersLeaderboardSchema()
+
+  const nowMs = Date.now()
+  const meta = await turso.execute({
+    sql: "SELECT expiresAtMs FROM leaderboard_materialization_meta WHERE key = ? LIMIT 1",
+    args: [USERS_ALLTIME_CACHE_KEY],
+  })
+
+  const expiresAtMsRaw = meta.rows[0]?.expiresAtMs
+  const expiresAtMs = expiresAtMsRaw === undefined ? 0 : Number(expiresAtMsRaw)
+
+  if (Number.isFinite(expiresAtMs) && expiresAtMs > nowMs) {
+    return
+  }
+
+  if (refreshUsersLeaderboardPromise) {
+    await refreshUsersLeaderboardPromise
+    return
+  }
+
+  refreshUsersLeaderboardPromise = (async () => {
+    try {
+      await refreshUsersLeaderboardMaterialized(nowMs)
+    } finally {
+      refreshUsersLeaderboardPromise = null
+    }
+  })()
+
+  await refreshUsersLeaderboardPromise
 }
 
 export interface IndexerUser {
@@ -82,38 +192,39 @@ export async function getIndexerUsers(options: GetIndexerUsersOptions = {}): Pro
     : undefined
 
   if (sortBy === "points" && !whereClause) {
-    const offset = (page - 1) * pageSize
+    await ensureUsersLeaderboardMaterialized()
 
-    const [totalCount, leaderboardRows, mysqlUsers] = await Promise.all([
-      prismaIndexer.indexerAllTimeUserLeaderboard.count(),
-      prismaIndexer.indexerAllTimeUserLeaderboard.findMany({
-        select: { fid: true, points: true },
-      }),
-      prisma.user.findMany({
-        select: { fid: true, points: true },
+    const sqlOrder = sortOrder === "asc" ? "ASC" : "DESC"
+    const [countResult, pageResult] = await Promise.all([
+      turso.execute("SELECT COUNT(*) as totalCount FROM leaderboard_users_alltime"),
+      turso.execute({
+        sql: `SELECT fid, points, pointsS1, pointsS2
+              FROM leaderboard_users_alltime
+              ORDER BY points ${sqlOrder}
+              LIMIT ? OFFSET ?`,
+        args: [pageSize, offset],
       }),
     ])
 
-    const s1PointsMap = new Map(mysqlUsers.map(u => [u.fid, u.points]))
+    const totalCountRaw = countResult.rows[0]?.totalCount
+    const totalCount = totalCountRaw === undefined ? 0 : Number(totalCountRaw)
+    assert(Number.isFinite(totalCount) && totalCount >= 0, "Invalid totalCount from leaderboard_users_alltime")
 
-    const totals = leaderboardRows
-      .map(r => {
-        const pointsS1 = s1PointsMap.get(r.fid) ?? 0
-        const pointsS2 = normalizeIndexerPoints(r.points)
-        return {
-          fid: r.fid,
-          pointsS1,
-          pointsS2,
-          points: pointsS1 + pointsS2,
-        }
-      })
-      .sort((a, b) => {
-        if (sortOrder === "asc") return a.points - b.points
-        return b.points - a.points
-      })
+    const pageSlice = pageResult.rows.map((row) => {
+      const fid = Number(row.fid)
+      const points = Number(row.points)
+      const pointsS1 = Number(row.pointsS1)
+      const pointsS2 = Number(row.pointsS2)
 
-    const pageSlice = totals.slice(offset, offset + pageSize)
-    const fids = pageSlice.map(r => r.fid)
+      assert(Number.isInteger(fid) && fid > 0, "Invalid fid from leaderboard_users_alltime")
+      assert(Number.isFinite(points), "Invalid points from leaderboard_users_alltime")
+      assert(Number.isFinite(pointsS1), "Invalid pointsS1 from leaderboard_users_alltime")
+      assert(Number.isFinite(pointsS2), "Invalid pointsS2 from leaderboard_users_alltime")
+
+      return { fid, points, pointsS1, pointsS2 }
+    })
+
+    const fids = pageSlice.map((r) => r.fid)
 
     const [indexerUsers, farcasterData] = await Promise.all([
       prismaIndexer.indexerUser.findMany({
@@ -166,17 +277,7 @@ export async function getIndexerUsers(options: GetIndexerUsersOptions = {}): Pro
   // Get all fids to enrich
   const fids = indexerUsers.map(u => u.fid)
   
-  // Enrich with Farcaster metadata and get S1 points from MySQL
-  const [farcasterData, mysqlUsers] = await Promise.all([
-    getUsersMetadata(fids),
-    prisma.user.findMany({
-      where: { fid: { in: fids } },
-      select: { fid: true, points: true },
-    }),
-  ])
-
-  // Create a map of S1 points by fid
-  const s1PointsMap = new Map(mysqlUsers.map(u => [u.fid, u.points]))
+  const [farcasterData, s1PointsMap] = await Promise.all([getUsersMetadata(fids), getS1UserPointsMap()])
 
   // Map to our interface
   const users: IndexerUser[] = indexerUsers.map(u => {
@@ -208,9 +309,9 @@ export async function getIndexerUsers(options: GetIndexerUsersOptions = {}): Pro
  * Get a single user by FID from Indexer + S1 points from MySQL
  */
 export async function getIndexerUserByFid(fid: number): Promise<IndexerUser | null> {
-  const [indexerUser, mysqlUser] = await Promise.all([
+  const [indexerUser, pointsS1] = await Promise.all([
     prismaIndexer.indexerUser.findUnique({ where: { fid } }),
-    prisma.user.findUnique({ where: { fid }, select: { points: true } }),
+    getS1UserPointsByFid(fid),
   ])
 
   if (!indexerUser) return null
@@ -219,7 +320,6 @@ export async function getIndexerUserByFid(fid: number): Promise<IndexerUser | nu
   const farcasterData = await getUsersMetadata([fid])
   const farcaster = farcasterData.get(fid)
 
-  const pointsS1 = mysqlUser?.points ?? 0
   const pointsS2 = normalizeIndexerPoints(indexerUser.points)
 
   return {

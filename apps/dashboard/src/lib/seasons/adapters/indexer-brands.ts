@@ -1,7 +1,9 @@
 import prismaIndexer from "@/lib/prisma-indexer"
-import prisma from "@/lib/prisma"
+import turso from "@/lib/turso"
 import { getBrandsMetadata } from "../enrichment/brands"
 import { Decimal } from "@prisma/client/runtime/library"
+import { getS1BrandScoreById, getS1BrandScoreMap } from "../s1-baseline"
+import assert from "node:assert"
 
 const BRND_DECIMALS = BigInt(18)
 const BRND_SCALE = BigInt(10) ** BRND_DECIMALS
@@ -23,6 +25,132 @@ function normalizeIndexerPoints(raw: Decimal | number | null | undefined): numbe
 
   const frac = value % BRND_SCALE
   return Number(whole) + Number(frac) / 1e18
+}
+
+const MATERIALIZED_TTL_MS = 60_000
+const BRANDS_ALLTIME_CACHE_KEY = "leaderboard:brands:alltime:v1"
+
+let isBrandsLeaderboardSchemaReady = false
+let refreshBrandsLeaderboardPromise: Promise<void> | null = null
+
+const ensureBrandsLeaderboardSchema = async (): Promise<void> => {
+  if (isBrandsLeaderboardSchemaReady) return
+
+  await turso.execute(`
+    CREATE TABLE IF NOT EXISTS leaderboard_materialization_meta (
+      key TEXT PRIMARY KEY,
+      expiresAtMs INTEGER NOT NULL,
+      updatedAtMs INTEGER NOT NULL
+    )
+  `)
+
+  await turso.execute(`
+    CREATE TABLE IF NOT EXISTS leaderboard_brands_alltime (
+      brandId INTEGER PRIMARY KEY,
+      allTimePoints REAL NOT NULL,
+      pointsS1 REAL NOT NULL,
+      pointsS2 REAL NOT NULL,
+      goldCount INTEGER NOT NULL,
+      silverCount INTEGER NOT NULL,
+      bronzeCount INTEGER NOT NULL,
+      updatedAtMs INTEGER NOT NULL
+    )
+  `)
+
+  await turso.execute(
+    "CREATE INDEX IF NOT EXISTS idx_leaderboard_brands_alltime_points ON leaderboard_brands_alltime (allTimePoints)"
+  )
+
+  isBrandsLeaderboardSchemaReady = true
+}
+
+const refreshBrandsLeaderboardMaterialized = async (nowMs: number): Promise<void> => {
+  const [leaderboardRows, s1ScoreMap] = await Promise.all([
+    prismaIndexer.indexerAllTimeBrandLeaderboard.findMany({
+      select: {
+        brand_id: true,
+        points: true,
+        gold_count: true,
+        silver_count: true,
+        bronze_count: true,
+      },
+    }),
+    getS1BrandScoreMap(),
+  ])
+
+  await turso.execute("DELETE FROM leaderboard_brands_alltime")
+
+  const chunkSize = 200
+  const updatedAtMs = nowMs
+
+  for (let i = 0; i < leaderboardRows.length; i += chunkSize) {
+    const chunk = leaderboardRows.slice(i, i + chunkSize)
+
+    const valuesSql = chunk.map(() => "(?, ?, ?, ?, ?, ?, ?, ?)").join(",")
+    const args = chunk.flatMap((row) => {
+      const pointsS1 = s1ScoreMap.get(row.brand_id) ?? 0
+      const pointsS2 = normalizeIndexerPoints(row.points)
+      const allTimePoints = pointsS1 + pointsS2
+
+      return [
+        row.brand_id,
+        allTimePoints,
+        pointsS1,
+        pointsS2,
+        row.gold_count,
+        row.silver_count,
+        row.bronze_count,
+        updatedAtMs,
+      ]
+    })
+
+    await turso.execute({
+      sql: `INSERT INTO leaderboard_brands_alltime (brandId, allTimePoints, pointsS1, pointsS2, goldCount, silverCount, bronzeCount, updatedAtMs)
+            VALUES ${valuesSql}
+            ON CONFLICT(brandId) DO UPDATE SET allTimePoints=excluded.allTimePoints, pointsS1=excluded.pointsS1, pointsS2=excluded.pointsS2, goldCount=excluded.goldCount, silverCount=excluded.silverCount, bronzeCount=excluded.bronzeCount, updatedAtMs=excluded.updatedAtMs`,
+      args,
+    })
+  }
+
+  const expiresAtMs = nowMs + MATERIALIZED_TTL_MS
+  await turso.execute({
+    sql: `INSERT INTO leaderboard_materialization_meta (key, expiresAtMs, updatedAtMs)
+          VALUES (?, ?, ?)
+          ON CONFLICT(key) DO UPDATE SET expiresAtMs=excluded.expiresAtMs, updatedAtMs=excluded.updatedAtMs`,
+    args: [BRANDS_ALLTIME_CACHE_KEY, expiresAtMs, nowMs],
+  })
+}
+
+const ensureBrandsLeaderboardMaterialized = async (): Promise<void> => {
+  await ensureBrandsLeaderboardSchema()
+
+  const nowMs = Date.now()
+  const meta = await turso.execute({
+    sql: "SELECT expiresAtMs FROM leaderboard_materialization_meta WHERE key = ? LIMIT 1",
+    args: [BRANDS_ALLTIME_CACHE_KEY],
+  })
+
+  const expiresAtMsRaw = meta.rows[0]?.expiresAtMs
+  const expiresAtMs = expiresAtMsRaw === undefined ? 0 : Number(expiresAtMsRaw)
+
+  if (Number.isFinite(expiresAtMs) && expiresAtMs > nowMs) {
+    return
+  }
+
+  if (refreshBrandsLeaderboardPromise) {
+    await refreshBrandsLeaderboardPromise
+    return
+  }
+
+  refreshBrandsLeaderboardPromise = (async () => {
+    try {
+      await refreshBrandsLeaderboardMaterialized(nowMs)
+    } finally {
+      refreshBrandsLeaderboardPromise = null
+    }
+  })()
+
+  await refreshBrandsLeaderboardPromise
 }
 
 export interface IndexerBrandWithMetrics {
@@ -87,45 +215,52 @@ export async function getIndexerBrands(options: GetIndexerBrandsOptions = {}): P
     : undefined
 
   if (sortBy === "allTimePoints" && !whereClause) {
-    const [totalCount, leaderboardRows, mysqlBrands] = await Promise.all([
-      prismaIndexer.indexerAllTimeBrandLeaderboard.count(),
-      prismaIndexer.indexerAllTimeBrandLeaderboard.findMany({
-        select: {
-          brand_id: true,
-          points: true,
-          gold_count: true,
-          silver_count: true,
-          bronze_count: true,
-        },
-      }),
-      prisma.brand.findMany({
-        select: { id: true, score: true },
+    await ensureBrandsLeaderboardMaterialized()
+
+    const sqlOrder = sortOrder === "asc" ? "ASC" : "DESC"
+    const [countResult, pageResult] = await Promise.all([
+      turso.execute("SELECT COUNT(*) as totalCount FROM leaderboard_brands_alltime"),
+      turso.execute({
+        sql: `SELECT brandId, allTimePoints, pointsS1, pointsS2, goldCount, silverCount, bronzeCount
+              FROM leaderboard_brands_alltime
+              ORDER BY allTimePoints ${sqlOrder}
+              LIMIT ? OFFSET ?`,
+        args: [pageSize, offset],
       }),
     ])
 
-    const s1ScoreMap = new Map(mysqlBrands.map(b => [b.id, b.score]))
+    const totalCountRaw = countResult.rows[0]?.totalCount
+    const totalCount = totalCountRaw === undefined ? 0 : Number(totalCountRaw)
+    assert(Number.isFinite(totalCount) && totalCount >= 0, "Invalid totalCount from leaderboard_brands_alltime")
 
-    const totalsSorted = leaderboardRows
-      .map(r => {
-        const pointsS1 = s1ScoreMap.get(r.brand_id) ?? 0
-        const pointsS2 = normalizeIndexerPoints(r.points)
+    const pageSlice = pageResult.rows.map((row, index) => {
+      const brandId = Number(row.brandId)
+      const allTimePoints = Number(row.allTimePoints)
+      const pointsS1 = Number(row.pointsS1)
+      const pointsS2 = Number(row.pointsS2)
+      const goldCount = Number(row.goldCount)
+      const silverCount = Number(row.silverCount)
+      const bronzeCount = Number(row.bronzeCount)
 
-        return {
-          brand_id: r.brand_id,
-          allTimePoints: pointsS1 + pointsS2,
-          goldCount: r.gold_count,
-          silverCount: r.silver_count,
-          bronzeCount: r.bronze_count,
-        }
-      })
-      .sort((a, b) => {
-        if (sortOrder === "asc") return a.allTimePoints - b.allTimePoints
-        return b.allTimePoints - a.allTimePoints
-      })
+      assert(Number.isInteger(brandId) && brandId > 0, "Invalid brandId from leaderboard_brands_alltime")
+      assert(Number.isFinite(allTimePoints), "Invalid allTimePoints from leaderboard_brands_alltime")
+      assert(Number.isFinite(pointsS1), "Invalid pointsS1 from leaderboard_brands_alltime")
+      assert(Number.isFinite(pointsS2), "Invalid pointsS2 from leaderboard_brands_alltime")
+      assert(Number.isFinite(goldCount), "Invalid goldCount from leaderboard_brands_alltime")
+      assert(Number.isFinite(silverCount), "Invalid silverCount from leaderboard_brands_alltime")
+      assert(Number.isFinite(bronzeCount), "Invalid bronzeCount from leaderboard_brands_alltime")
 
-    const pageSlice = totalsSorted
-      .map((row, index) => ({ ...row, allTimeRank: index + 1 }))
-      .slice(offset, offset + pageSize)
+      return {
+        brand_id: brandId,
+        allTimePoints,
+        pointsS1,
+        pointsS2,
+        goldCount,
+        silverCount,
+        bronzeCount,
+        allTimeRank: offset + index + 1,
+      }
+    })
 
     const brandIds = pageSlice.map(r => r.brand_id)
 
@@ -188,11 +323,7 @@ export async function getIndexerBrands(options: GetIndexerBrandsOptions = {}): P
 
   const brandIds = leaderboardEntries.map(e => e.brand_id)
 
-  const mysqlBrands = await prisma.brand.findMany({
-    where: { id: { in: brandIds } },
-    select: { id: true, score: true },
-  })
-  const s1ScoreMap = new Map(mysqlBrands.map(b => [b.id, b.score]))
+  const s1ScoreMap = await getS1BrandScoreMap()
 
   // Get onchain brand data
   const onchainBrands = await prismaIndexer.indexerBrand.findMany({
@@ -252,11 +383,11 @@ export async function getIndexerBrands(options: GetIndexerBrandsOptions = {}): P
  * Get a single brand by ID with full metrics
  */
 export async function getIndexerBrandById(brandId: number): Promise<IndexerBrandWithMetrics | null> {
-  const [onchain, allTime, metadata, mysqlBrand] = await Promise.all([
+  const [onchain, allTime, metadata, pointsS1] = await Promise.all([
     prismaIndexer.indexerBrand.findUnique({ where: { id: brandId } }),
     prismaIndexer.indexerAllTimeBrandLeaderboard.findUnique({ where: { brand_id: brandId } }),
     getBrandsMetadata([brandId]),
-    prisma.brand.findUnique({ where: { id: brandId }, select: { score: true } }),
+    getS1BrandScoreById(brandId),
   ])
 
   if (!allTime && !onchain) return null
@@ -268,7 +399,6 @@ export async function getIndexerBrandById(brandId: number): Promise<IndexerBrand
 
   const meta = metadata.get(brandId)
 
-  const pointsS1 = mysqlBrand?.score ?? 0
   const pointsS2 = normalizeIndexerPoints(allTime?.points)
 
   return {
