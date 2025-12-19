@@ -1,6 +1,7 @@
 import prisma from "@/lib/prisma"
 import { ApplicationsTable } from "@/components/dashboard/ApplicationsTable"
 import { Suspense } from "react"
+import { Skeleton } from "@/components/ui/skeleton"
 
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
@@ -44,13 +45,13 @@ function ApplicationsSkeleton() {
     return (
         <div className="space-y-4">
             {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="p-6 rounded-xl border border-zinc-800 bg-zinc-900/30 animate-pulse">
+                <div key={i} className="p-6 rounded-xl border border-zinc-800 bg-zinc-900/30">
                     <div className="flex items-start gap-4">
-                        <div className="w-16 h-16 bg-zinc-800 rounded-lg" />
+                        <Skeleton className="w-16 h-16 rounded-lg" />
                         <div className="flex-1 space-y-2">
-                            <div className="h-5 w-48 bg-zinc-800 rounded" />
-                            <div className="h-3 w-32 bg-zinc-800 rounded" />
-                            <div className="h-3 w-64 bg-zinc-800 rounded" />
+                            <Skeleton className="h-5 w-48" />
+                            <Skeleton className="h-3 w-32" />
+                            <Skeleton className="h-3 w-64" />
                         </div>
                     </div>
                 </div>

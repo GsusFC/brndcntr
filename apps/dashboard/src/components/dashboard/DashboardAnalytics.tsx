@@ -9,6 +9,7 @@ import {
 } from "recharts"
 import { TrendingUp, TrendingDown, Users, UserPlus, Repeat, Activity, Clock, Loader2 } from "lucide-react"
 import { Card } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
 
 interface DashboardData {
     votesPerDay: Array<{ date: string; count: number }>
@@ -166,7 +167,7 @@ export function DashboardAnalytics() {
                                 />
                             </AreaChart>
                         </ResponsiveContainer>
-                        ) : <div className="h-full bg-zinc-900/50 rounded-xl animate-pulse" />}
+                        ) : <Skeleton className="h-full rounded-xl bg-zinc-900/50" />}
                     </div>
                 </Card>
 
@@ -201,7 +202,7 @@ export function DashboardAnalytics() {
                                 <Bar dataKey="votes" fill="#a855f7" radius={[4, 4, 0, 0]} activeBar={false} />
                             </BarChart>
                         </ResponsiveContainer>
-                        ) : <div className="h-full bg-zinc-900/50 rounded-xl animate-pulse" />}
+                        ) : <Skeleton className="h-full rounded-xl bg-zinc-900/50" />}
                     </div>
                 </Card>
             </div>
@@ -329,7 +330,7 @@ export function DashboardAnalytics() {
                                 />
                             </PieChart>
                         </ResponsiveContainer>
-                        ) : <div className="h-full bg-zinc-900/50 rounded-xl animate-pulse" />}
+                        ) : <Skeleton className="h-full rounded-xl bg-zinc-900/50" />}
                     </div>
                     <div className="flex flex-wrap gap-2 mt-2">
                         {categoryDistribution.slice(0, 4).map((cat, idx) => (
