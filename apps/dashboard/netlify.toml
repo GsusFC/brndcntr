@@ -1,0 +1,15 @@
+[build]
+  command = "npm install --legacy-peer-deps && npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "20"
+  NPM_FLAGS = "--legacy-peer-deps"
+
+[functions]
+  external_node_modules = ["@prisma/client", "@prisma/client-write", "@prisma/client-indexer"]
+  node_bundler = "esbuild"
+  included_files = ["node_modules/@prisma/client-write/**", "node_modules/@prisma/client-indexer/**", "node_modules/.prisma/**"]
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"

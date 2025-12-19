@@ -1,0 +1,23 @@
+# Indexer (Season 2) - Postgres READ ONLY (dashboard)
+# Example: postgresql://user:password@host:5432/dbname?sslmode=require
+INDEXER_DATABASE_URL=""
+
+# Legacy / Control Plane - MySQL (dashboard writes)
+MYSQL_DATABASE_URL=""
+
+# Prisma Migrate (dev/diff) shadow database
+MYSQL_SHADOW_DATABASE_URL=""
+
+# NextAuth Configuration
+# You can generate a new secret with: openssl rand -base64 32
+AUTH_SECRET="KlGutUlFLXygr2QWf6boUxTnitqeW7iwDZJcmXo0fck="
+AUTH_URL="http://localhost:3000"
+
+# Google OAuth Credentials
+# Get these from Google Cloud Console: https://console.cloud.google.com/apis/credentials
+GOOGLE_CLIENT_ID=""
+GOOGLE_CLIENT_SECRET=""
+
+# Reown (WalletConnect) Configuration
+# Get your project ID from: https://cloud.reown.com
+NEXT_PUBLIC_REOWN_PROJECT_ID=""
