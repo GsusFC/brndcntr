@@ -1,12 +1,13 @@
 "use client"
 
 import dynamic from "next/dynamic"
+import { Skeleton } from "@/components/ui/skeleton"
 
 const DynamicChart = dynamic(
     () => import("./DynamicChart").then(mod => ({ default: mod.DynamicChart })),
     {
         loading: () => (
-            <div className="h-64 bg-zinc-900 rounded-xl animate-pulse" />
+            <Skeleton className="h-64 rounded-xl bg-zinc-900" />
         ),
         ssr: false
     }

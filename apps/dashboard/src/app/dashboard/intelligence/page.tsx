@@ -5,15 +5,16 @@ import { Send, Loader2, Download, Copy, Sparkles, Bot, User, Trash2, FileSpreads
 import Link from "next/link"
 import { toast } from "sonner"
 import dynamic from "next/dynamic"
+import { Skeleton } from "@/components/ui/skeleton"
 
 // Dynamic imports para reducir bundle inicial (~100kB de recharts)
 const DynamicChart = dynamic(
     () => import("@/components/intelligence/DynamicChart").then(mod => ({ default: mod.DynamicChart })),
-    { loading: () => <div className="h-64 bg-zinc-900 rounded-xl animate-pulse" />, ssr: false }
+    { loading: () => <Skeleton className="h-64 rounded-xl bg-zinc-900" />, ssr: false }
 )
 const WeekLeaderboard = dynamic(
     () => import("@/components/intelligence/WeekLeaderboard").then(mod => ({ default: mod.WeekLeaderboard })),
-    { loading: () => <div className="h-96 bg-zinc-900 rounded-xl animate-pulse" />, ssr: false }
+    { loading: () => <Skeleton className="h-96 rounded-xl bg-zinc-900" />, ssr: false }
 )
 
 import { useMessageHistory, useQueryCache, queryTemplates, type Message } from "@/lib/intelligence/hooks"

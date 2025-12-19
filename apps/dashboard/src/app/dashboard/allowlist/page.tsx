@@ -3,6 +3,7 @@ import { getAllowedWallets, getTokenGateSettings } from "@/lib/actions/wallet-ac
 import { AllowlistTable } from "@/components/dashboard/AllowlistTable"
 import { AddWalletForm } from "@/components/dashboard/AddWalletForm"
 import { TokenSettingsForm } from "@/components/dashboard/TokenSettingsForm"
+import { Skeleton } from "@/components/ui/skeleton"
 
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
@@ -76,18 +77,18 @@ function AllowlistTableSkeleton() {
                 <div className="overflow-hidden rounded-xl border border-zinc-800">
                     {/* Header skeleton */}
                     <div className="flex gap-4 py-4 px-6 bg-zinc-900/50 border-b border-zinc-800">
-                        <div className="h-3 w-32 animate-pulse bg-zinc-800 rounded" />
-                        <div className="h-3 w-24 animate-pulse bg-zinc-800 rounded" />
-                        <div className="h-3 w-20 animate-pulse bg-zinc-800 rounded" />
+                        <Skeleton className="h-3 w-32" />
+                        <Skeleton className="h-3 w-24" />
+                        <Skeleton className="h-3 w-20" />
                     </div>
 
                     {/* Rows skeleton */}
                     {Array.from({ length: 3 }).map((_, i) => (
                         <div key={i} className="flex items-center gap-4 py-4 px-6 border-b border-zinc-800">
-                            <div className="h-4 w-80 animate-pulse bg-zinc-800 rounded font-mono" />
-                            <div className="h-4 w-32 animate-pulse bg-zinc-800 rounded" />
-                            <div className="h-4 w-24 animate-pulse bg-zinc-800 rounded" />
-                            <div className="h-8 w-8 animate-pulse bg-zinc-800 rounded ml-auto" />
+                            <Skeleton className="h-4 w-80 font-mono" />
+                            <Skeleton className="h-4 w-32" />
+                            <Skeleton className="h-4 w-24" />
+                            <Skeleton className="h-8 w-8 ml-auto" />
                         </div>
                     ))}
                 </div>

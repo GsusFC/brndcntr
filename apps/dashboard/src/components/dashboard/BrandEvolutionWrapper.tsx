@@ -1,10 +1,11 @@
 "use client"
 
 import dynamic from "next/dynamic"
+import { Skeleton } from "@/components/ui/skeleton"
 
 const BrandEvolutionChart = dynamic(
     () => import("@/components/intelligence/BrandEvolutionChart").then(mod => ({ default: mod.BrandEvolutionChart })),
-    { loading: () => <div className="h-[500px] bg-zinc-900 rounded-xl animate-pulse" />, ssr: false }
+    { loading: () => <Skeleton className="h-[500px] rounded-xl bg-zinc-900" />, ssr: false }
 )
 
 export function BrandEvolutionWrapper() {

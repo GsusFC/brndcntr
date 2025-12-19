@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardTitle, CardContent } from "@/components/ui/card"
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Separator } from "@/components/ui/separator"
 import { Plus, Search, Trash2, Rocket, Check, AlertTriangle, Info, Copy, ExternalLink } from "lucide-react"
 
 export default function DesignSystemPage() {
@@ -132,6 +134,39 @@ export default function DesignSystemPage() {
                         <div className="grid grid-cols-2 gap-4">
                             <Input type="number" placeholder="Number" />
                             <Input type="password" placeholder="Password" />
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardTitle>Skeleton & Separator</CardTitle>
+                <CardContent className="space-y-6">
+                    <div>
+                        <p className="text-xs font-mono text-zinc-500 uppercase tracking-wider mb-3">Skeleton</p>
+                        <div className="space-y-3">
+                            <Skeleton className="h-6 w-64" />
+                            <Skeleton className="h-4 w-96" />
+                            <div className="flex items-center gap-3">
+                                <Skeleton className="h-10 w-10 rounded-full" />
+                                <div className="space-y-2">
+                                    <Skeleton className="h-4 w-40" />
+                                    <Skeleton className="h-3 w-24 bg-zinc-900" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <p className="text-xs font-mono text-zinc-500 uppercase tracking-wider mb-3">Separator</p>
+                        <div className="space-y-4">
+                            <Separator />
+                            <div className="flex items-stretch gap-4">
+                                <div className="text-sm text-zinc-400">Left</div>
+                                <Separator orientation="vertical" className="h-8" />
+                                <div className="text-sm text-zinc-400">Right</div>
+                            </div>
+                            <Separator className="bg-zinc-800" />
                         </div>
                     </div>
                 </CardContent>

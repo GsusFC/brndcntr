@@ -1,6 +1,7 @@
 import { Search } from "@/components/ui/Search"
 import { BrandsTableS2 } from "@/components/dashboard/BrandsTableS2"
 import { Suspense } from "react"
+import { Skeleton } from "@/components/ui/skeleton"
 
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
@@ -54,7 +55,7 @@ function BrandsTableSkeleton() {
         <div className="mt-6 flow-root">
             {/* Skeleton del contador */}
             <div className="mb-4">
-                <div className="h-5 w-48 animate-pulse bg-zinc-800 rounded" />
+                <Skeleton className="h-5 w-48" />
             </div>
             
             {/* Skeleton de la tabla */}
@@ -62,26 +63,26 @@ function BrandsTableSkeleton() {
                 <div className="overflow-hidden">
                     {/* Header skeleton */}
                     <div className="flex gap-4 py-4 px-6 border-b border-zinc-900">
-                        <div className="h-3 w-20 animate-pulse bg-zinc-800 rounded" />
-                        <div className="h-3 w-16 animate-pulse bg-zinc-800 rounded" />
-                        <div className="h-3 w-12 animate-pulse bg-zinc-800 rounded" />
-                        <div className="h-3 w-14 animate-pulse bg-zinc-800 rounded" />
+                        <Skeleton className="h-3 w-20" />
+                        <Skeleton className="h-3 w-16" />
+                        <Skeleton className="h-3 w-12" />
+                        <Skeleton className="h-3 w-14" />
                     </div>
                     
                     {/* Rows skeleton */}
                     {Array.from({ length: 5 }).map((_, i) => (
                         <div key={i} className="flex items-center gap-4 py-4 px-6 border-b border-zinc-900">
                             <div className="flex items-center gap-3 flex-1">
-                                <div className="h-8 w-8 animate-pulse bg-zinc-800 rounded-lg" />
+                                <Skeleton className="h-8 w-8 rounded-lg" />
                                 <div className="space-y-1.5">
-                                    <div className="h-4 w-32 animate-pulse bg-zinc-800 rounded" />
-                                    <div className="h-2.5 w-16 animate-pulse bg-zinc-900 rounded" />
+                                    <Skeleton className="h-4 w-32" />
+                                    <Skeleton className="h-2.5 w-16 bg-zinc-900" />
                                 </div>
                             </div>
-                            <div className="h-5 w-20 animate-pulse bg-zinc-800 rounded" />
-                            <div className="h-5 w-16 animate-pulse bg-zinc-800 rounded" />
-                            <div className="h-5 w-14 animate-pulse bg-zinc-800 rounded-full" />
-                            <div className="h-8 w-16 animate-pulse bg-zinc-800 rounded" />
+                            <Skeleton className="h-5 w-20" />
+                            <Skeleton className="h-5 w-16" />
+                            <Skeleton className="h-5 w-14 rounded-full" />
+                            <Skeleton className="h-8 w-16" />
                         </div>
                     ))}
                 </div>

@@ -1,6 +1,7 @@
 import { Search } from "@/components/ui/Search"
 import { AirdropTable, AirdropStats } from "@/components/dashboard/AirdropComponents"
 import { Suspense } from "react"
+import { Skeleton } from "@/components/ui/skeleton"
 
 export const dynamic = 'force-dynamic'
 
@@ -28,7 +29,7 @@ export default async function AirdropPage({
                 </button>
             </div>
 
-            <Suspense fallback={<div className="h-32 animate-pulse bg-surface rounded-xl mb-8" />}>
+            <Suspense fallback={<Skeleton className="h-32 rounded-xl mb-8 bg-surface" />}>
                 <AirdropStats />
             </Suspense>
 
@@ -48,7 +49,7 @@ function AirdropTableSkeleton() {
         <div className="mt-6 flow-root">
             <div className="inline-block min-w-full align-middle">
                 <div className="rounded-lg bg-surface p-2 md:pt-0">
-                    <div className="h-96 animate-pulse bg-surface-hover rounded-md" />
+                    <Skeleton className="h-96 rounded-md bg-surface-hover" />
                 </div>
             </div>
         </div>
