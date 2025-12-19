@@ -4,6 +4,7 @@ import { getBrandsMetadata } from "../enrichment/brands"
 import { Decimal } from "@prisma/client/runtime/library"
 import { getS1BrandScoreById, getS1BrandScoreMap } from "../s1-baseline"
 import assert from "node:assert"
+import { incrementCounter, recordLatency } from "@/lib/metrics"
 
 const BRND_DECIMALS = BigInt(18)
 const BRND_SCALE = BigInt(10) ** BRND_DECIMALS
@@ -65,6 +66,9 @@ const ensureBrandsLeaderboardSchema = async (): Promise<void> => {
 }
 
 const refreshBrandsLeaderboardMaterialized = async (nowMs: number): Promise<void> => {
+  const startMs = Date.now()
+  let ok = false
+
   const [leaderboardRows, s1ScoreMap] = await Promise.all([
     prismaIndexer.indexerAllTimeBrandLeaderboard.findMany({
       select: {
@@ -78,47 +82,54 @@ const refreshBrandsLeaderboardMaterialized = async (nowMs: number): Promise<void
     getS1BrandScoreMap(),
   ])
 
-  await turso.execute("DELETE FROM leaderboard_brands_alltime")
+  try {
+    await turso.execute("DELETE FROM leaderboard_brands_alltime")
 
-  const chunkSize = 200
-  const updatedAtMs = nowMs
+    const chunkSize = 200
+    const updatedAtMs = nowMs
 
-  for (let i = 0; i < leaderboardRows.length; i += chunkSize) {
-    const chunk = leaderboardRows.slice(i, i + chunkSize)
+    for (let i = 0; i < leaderboardRows.length; i += chunkSize) {
+      const chunk = leaderboardRows.slice(i, i + chunkSize)
 
-    const valuesSql = chunk.map(() => "(?, ?, ?, ?, ?, ?, ?, ?)").join(",")
-    const args = chunk.flatMap((row) => {
-      const pointsS1 = s1ScoreMap.get(row.brand_id) ?? 0
-      const pointsS2 = normalizeIndexerPoints(row.points)
-      const allTimePoints = pointsS1 + pointsS2
+      const valuesSql = chunk.map(() => "(?, ?, ?, ?, ?, ?, ?, ?)").join(",")
+      const args = chunk.flatMap((row) => {
+        const pointsS1 = s1ScoreMap.get(row.brand_id) ?? 0
+        const pointsS2 = normalizeIndexerPoints(row.points)
+        const allTimePoints = pointsS1 + pointsS2
 
-      return [
-        row.brand_id,
-        allTimePoints,
-        pointsS1,
-        pointsS2,
-        row.gold_count,
-        row.silver_count,
-        row.bronze_count,
-        updatedAtMs,
-      ]
-    })
+        return [
+          row.brand_id,
+          allTimePoints,
+          pointsS1,
+          pointsS2,
+          row.gold_count,
+          row.silver_count,
+          row.bronze_count,
+          updatedAtMs,
+        ]
+      })
 
+      await turso.execute({
+        sql: `INSERT INTO leaderboard_brands_alltime (brandId, allTimePoints, pointsS1, pointsS2, goldCount, silverCount, bronzeCount, updatedAtMs)
+              VALUES ${valuesSql}
+              ON CONFLICT(brandId) DO UPDATE SET allTimePoints=excluded.allTimePoints, pointsS1=excluded.pointsS1, pointsS2=excluded.pointsS2, goldCount=excluded.goldCount, silverCount=excluded.silverCount, bronzeCount=excluded.bronzeCount, updatedAtMs=excluded.updatedAtMs`,
+        args,
+      })
+    }
+
+    const expiresAtMs = nowMs + MATERIALIZED_TTL_MS
     await turso.execute({
-      sql: `INSERT INTO leaderboard_brands_alltime (brandId, allTimePoints, pointsS1, pointsS2, goldCount, silverCount, bronzeCount, updatedAtMs)
-            VALUES ${valuesSql}
-            ON CONFLICT(brandId) DO UPDATE SET allTimePoints=excluded.allTimePoints, pointsS1=excluded.pointsS1, pointsS2=excluded.pointsS2, goldCount=excluded.goldCount, silverCount=excluded.silverCount, bronzeCount=excluded.bronzeCount, updatedAtMs=excluded.updatedAtMs`,
-      args,
+      sql: `INSERT INTO leaderboard_materialization_meta (key, expiresAtMs, updatedAtMs)
+            VALUES (?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET expiresAtMs=excluded.expiresAtMs, updatedAtMs=excluded.updatedAtMs`,
+      args: [BRANDS_ALLTIME_CACHE_KEY, expiresAtMs, nowMs],
     })
-  }
 
-  const expiresAtMs = nowMs + MATERIALIZED_TTL_MS
-  await turso.execute({
-    sql: `INSERT INTO leaderboard_materialization_meta (key, expiresAtMs, updatedAtMs)
-          VALUES (?, ?, ?)
-          ON CONFLICT(key) DO UPDATE SET expiresAtMs=excluded.expiresAtMs, updatedAtMs=excluded.updatedAtMs`,
-    args: [BRANDS_ALLTIME_CACHE_KEY, expiresAtMs, nowMs],
-  })
+    ok = true
+  } finally {
+    await recordLatency("cache.refresh.leaderboard_brands_alltime", Date.now() - startMs, ok)
+    if (!ok) await incrementCounter("cache.refresh_error.leaderboard_brands_alltime")
+  }
 }
 
 const ensureBrandsLeaderboardMaterialized = async (): Promise<void> => {
@@ -134,8 +145,11 @@ const ensureBrandsLeaderboardMaterialized = async (): Promise<void> => {
   const expiresAtMs = expiresAtMsRaw === undefined ? 0 : Number(expiresAtMsRaw)
 
   if (Number.isFinite(expiresAtMs) && expiresAtMs > nowMs) {
+    await incrementCounter("cache.hit.leaderboard_brands_alltime")
     return
   }
+
+  await incrementCounter("cache.miss.leaderboard_brands_alltime")
 
   if (refreshBrandsLeaderboardPromise) {
     await refreshBrandsLeaderboardPromise

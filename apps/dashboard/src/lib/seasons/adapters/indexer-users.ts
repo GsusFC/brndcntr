@@ -4,6 +4,7 @@ import { getUsersMetadata } from "../enrichment/users"
 import { Decimal } from "@prisma/client/runtime/library"
 import { getS1UserPointsByFid, getS1UserPointsMap } from "../s1-baseline"
 import assert from "node:assert"
+import { incrementCounter, recordLatency } from "@/lib/metrics"
 
 const BRND_DECIMALS = BigInt(18)
 const BRND_SCALE = BigInt(10) ** BRND_DECIMALS
@@ -62,6 +63,9 @@ const ensureUsersLeaderboardSchema = async (): Promise<void> => {
 }
 
 const refreshUsersLeaderboardMaterialized = async (nowMs: number): Promise<void> => {
+  const startMs = Date.now()
+  let ok = false
+
   const [leaderboardRows, s1PointsMap] = await Promise.all([
     prismaIndexer.indexerAllTimeUserLeaderboard.findMany({
       select: { fid: true, points: true },
@@ -69,38 +73,45 @@ const refreshUsersLeaderboardMaterialized = async (nowMs: number): Promise<void>
     getS1UserPointsMap(),
   ])
 
-  await turso.execute("DELETE FROM leaderboard_users_alltime")
+  try {
+    await turso.execute("DELETE FROM leaderboard_users_alltime")
 
-  const chunkSize = 200
-  const updatedAtMs = nowMs
+    const chunkSize = 200
+    const updatedAtMs = nowMs
 
-  for (let i = 0; i < leaderboardRows.length; i += chunkSize) {
-    const chunk = leaderboardRows.slice(i, i + chunkSize)
+    for (let i = 0; i < leaderboardRows.length; i += chunkSize) {
+      const chunk = leaderboardRows.slice(i, i + chunkSize)
 
-    const valuesSql = chunk.map(() => "(?, ?, ?, ?, ?)").join(",")
-    const args = chunk.flatMap((row) => {
-      const pointsS1 = s1PointsMap.get(row.fid) ?? 0
-      const pointsS2 = normalizeIndexerPoints(row.points)
-      const points = pointsS1 + pointsS2
+      const valuesSql = chunk.map(() => "(?, ?, ?, ?, ?)").join(",")
+      const args = chunk.flatMap((row) => {
+        const pointsS1 = s1PointsMap.get(row.fid) ?? 0
+        const pointsS2 = normalizeIndexerPoints(row.points)
+        const points = pointsS1 + pointsS2
 
-      return [row.fid, points, pointsS1, pointsS2, updatedAtMs]
-    })
+        return [row.fid, points, pointsS1, pointsS2, updatedAtMs]
+      })
 
+      await turso.execute({
+        sql: `INSERT INTO leaderboard_users_alltime (fid, points, pointsS1, pointsS2, updatedAtMs)
+              VALUES ${valuesSql}
+              ON CONFLICT(fid) DO UPDATE SET points=excluded.points, pointsS1=excluded.pointsS1, pointsS2=excluded.pointsS2, updatedAtMs=excluded.updatedAtMs`,
+        args,
+      })
+    }
+
+    const expiresAtMs = nowMs + MATERIALIZED_TTL_MS
     await turso.execute({
-      sql: `INSERT INTO leaderboard_users_alltime (fid, points, pointsS1, pointsS2, updatedAtMs)
-            VALUES ${valuesSql}
-            ON CONFLICT(fid) DO UPDATE SET points=excluded.points, pointsS1=excluded.pointsS1, pointsS2=excluded.pointsS2, updatedAtMs=excluded.updatedAtMs`,
-      args,
+      sql: `INSERT INTO leaderboard_materialization_meta (key, expiresAtMs, updatedAtMs)
+            VALUES (?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET expiresAtMs=excluded.expiresAtMs, updatedAtMs=excluded.updatedAtMs`,
+      args: [USERS_ALLTIME_CACHE_KEY, expiresAtMs, nowMs],
     })
-  }
 
-  const expiresAtMs = nowMs + MATERIALIZED_TTL_MS
-  await turso.execute({
-    sql: `INSERT INTO leaderboard_materialization_meta (key, expiresAtMs, updatedAtMs)
-          VALUES (?, ?, ?)
-          ON CONFLICT(key) DO UPDATE SET expiresAtMs=excluded.expiresAtMs, updatedAtMs=excluded.updatedAtMs`,
-    args: [USERS_ALLTIME_CACHE_KEY, expiresAtMs, nowMs],
-  })
+    ok = true
+  } finally {
+    await recordLatency("cache.refresh.leaderboard_users_alltime", Date.now() - startMs, ok)
+    if (!ok) await incrementCounter("cache.refresh_error.leaderboard_users_alltime")
+  }
 }
 
 const ensureUsersLeaderboardMaterialized = async (): Promise<void> => {
@@ -116,8 +127,11 @@ const ensureUsersLeaderboardMaterialized = async (): Promise<void> => {
   const expiresAtMs = expiresAtMsRaw === undefined ? 0 : Number(expiresAtMsRaw)
 
   if (Number.isFinite(expiresAtMs) && expiresAtMs > nowMs) {
+    await incrementCounter("cache.hit.leaderboard_users_alltime")
     return
   }
+
+  await incrementCounter("cache.miss.leaderboard_users_alltime")
 
   if (refreshUsersLeaderboardPromise) {
     await refreshUsersLeaderboardPromise
