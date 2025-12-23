@@ -1,11 +1,12 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useState } from "react"
 import Image from "next/image"
 import html2canvas from "html2canvas"
 import { Download, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { getRankSvgString } from "@/utils/rank-badges"
 
 interface LeaderboardEntry {
     rank: number
@@ -24,62 +25,29 @@ interface WeekLeaderboardProps {
     title?: string
 }
 
-const getRankSvgMarkup = (rank: number): string => {
-    const segmentRects = {
-        a: { x: 20, y: 6, w: 60, h: 14, rx: 7 },
-        b: { x: 76, y: 18, w: 14, h: 50, rx: 7 },
-        c: { x: 76, y: 78, w: 14, h: 50, rx: 7 },
-        d: { x: 20, y: 124, w: 60, h: 14, rx: 7 },
-        e: { x: 10, y: 78, w: 14, h: 50, rx: 7 },
-        f: { x: 10, y: 18, w: 14, h: 50, rx: 7 },
-        g: { x: 20, y: 66, w: 60, h: 14, rx: 7 },
-    } as const
+const EXPORT_WIDTH = 1150
+const EXPORT_HEIGHT = 960
 
-    type SegmentKey = keyof typeof segmentRects
-
-    const digitSegments: Record<string, SegmentKey[]> = {
-        0: ["a", "b", "c", "d", "e", "f"],
-        1: ["b", "c"],
-        2: ["a", "b", "g", "e", "d"],
-        3: ["a", "b", "g", "c", "d"],
-        4: ["f", "g", "b", "c"],
-        5: ["a", "f", "g", "c", "d"],
-        6: ["a", "f", "g", "e", "c", "d"],
-        7: ["a", "b", "c"],
-        8: ["a", "b", "c", "d", "e", "f", "g"],
-        9: ["a", "b", "c", "d", "f", "g"],
-    }
-
-    const digits = String(rank).split("")
-    const digitWidth = 100
-    const digitHeight = 144
-    const gap = 12
-    const viewBoxWidth = digits.length * digitWidth + Math.max(0, digits.length - 1) * gap
-
-    const svgHeight = 18
-    const svgWidth = Math.max(10, Math.round((svgHeight * viewBoxWidth) / digitHeight))
-
-    const svgContent = digits
-        .map((digit, index) => {
-            const segments = digitSegments[digit] ?? []
-            const xOffset = index * (digitWidth + gap)
-
-            const rects = segments
-                .map((segmentKey) => {
-                    const rect = segmentRects[segmentKey]
-                    return `<rect x="${rect.x}" y="${rect.y}" width="${rect.w}" height="${rect.h}" rx="${rect.rx}" fill="currentColor" />`
-                })
-                .join("")
-
-            return `<g transform="translate(${xOffset} 0)">${rects}</g>`
-        })
-        .join("")
-
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${viewBoxWidth} ${digitHeight}" preserveAspectRatio="xMidYMid meet" style="display:block">${svgContent}</svg>`
+const escapeHtml = (value: string): string => {
+    return value.replace(/[&<>"']/g, (char) => {
+        switch (char) {
+            case "&":
+                return "&amp;"
+            case "<":
+                return "&lt;"
+            case ">":
+                return "&gt;"
+            case '"':
+                return "&quot;"
+            case "'":
+                return "&#39;"
+            default:
+                return char
+        }
+    })
 }
 
 export function WeekLeaderboard({ data, title }: WeekLeaderboardProps) {
-    const exportRef = useRef<HTMLDivElement>(null)
     const [exporting, setExporting] = useState(false)
 
     if (!data || data.length === 0) return null
@@ -98,7 +66,7 @@ export function WeekLeaderboard({ data, title }: WeekLeaderboardProps) {
     }))
 
     const getRankBadge = (rank: number, isExport = false) => {
-        const baseClasses = `w-10 h-10 rounded-full flex items-center justify-center font-black text-lg`
+        const baseClasses = `w-10 h-10 rounded-full flex items-center justify-center font-display font-black text-lg`
         if (isExport) {
             // Versión para exportación (light mode)
             switch (rank) {
@@ -125,35 +93,117 @@ export function WeekLeaderboard({ data, title }: WeekLeaderboardProps) {
         }
     }
 
-    const handleExportPNG = async () => {
-        const element = exportRef.current
-        if (!element) return
+     const handleExportPNG = async () => {
         setExporting(true)
 
         try {
-            await document.fonts?.ready
+            const padding = 32
+            const headerMinHeight = 54
+            const rowMinHeight = 52
+            const contentMinHeight = headerMinHeight + entries.length * rowMinHeight
+            const exportHeight = Math.max(EXPORT_HEIGHT, padding * 2 + contentMinHeight)
 
-            const canvas = await html2canvas(element, {
+            const tempContainer = document.createElement("div")
+            tempContainer.style.position = "absolute"
+            tempContainer.style.left = "-9999px"
+            tempContainer.style.width = `${EXPORT_WIDTH}px`
+            tempContainer.style.height = `${exportHeight}px`
+            tempContainer.style.backgroundColor = "#09090b" // zinc-950
+            tempContainer.style.padding = `${padding}px`
+            tempContainer.style.fontFamily = "system-ui, -apple-system, sans-serif"
+            document.body.appendChild(tempContainer)
+
+            tempContainer.innerHTML = `
+                <div style="width: 100%; height: 100%; display: flex; flex-direction: column; box-sizing: border-box;">
+                    <div style="border: 1px solid #27272a; border-radius: 16px; overflow: hidden; background: #09090b;">
+                        <div style="display: grid; grid-template-columns: 70px 1fr 130px 220px 110px; gap: 16px; padding: 18px 28px; background: rgba(24, 24, 27, 0.5); border-bottom: 1px solid #27272a; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: #71717a;">
+                            <div>Rank</div>
+                            <div>Brand</div>
+                            <div style="text-align: center;">Score</div>
+                            <div style="text-align: center;">Podium Breakdown</div>
+                            <div style="text-align: right;">Total Podiums</div>
+                        </div>
+                        ${entries
+                            .map((entry, idx) => {
+                                const safeName = escapeHtml(entry.name)
+                                const safeImageUrl = entry.imageUrl ? escapeHtml(entry.imageUrl) : null
+                                const safeInitial = escapeHtml(entry.name.charAt(0).toUpperCase())
+
+                                const rankSvg = encodeURIComponent(getRankSvgString(entry.rank, 36))
+                                const scoreColor = entry.rank === 1 ? "#facc15" : entry.rank === 2 ? "#d4d4d8" : entry.rank === 3 ? "#fbbf24" : "#ffffff"
+                                const borderBottom = idx < entries.length - 1 ? "border-bottom: 1px solid rgba(39, 39, 42, 0.5);" : ""
+                                const rowBg = entry.rank <= 3 ? "background: rgba(24, 24, 27, 0.3);" : ""
+
+                                return `
+                                    <div style="display: grid; grid-template-columns: 70px 1fr 130px 220px 110px; gap: 16px; padding: 16px 28px; align-items: center; ${borderBottom} ${rowBg} box-sizing: border-box;">
+                                        <div style="display: flex; align-items: center; justify-content: flex-start;">
+                                            <img src="data:image/svg+xml;charset=utf-8,${rankSvg}" style="width: 36px; height: 36px; display: block;" />
+                                        </div>
+                                        <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
+                                            ${safeImageUrl
+                                                ? `<img src="${safeImageUrl}" style="width: 36px; height: 36px; border-radius: 8px; border: 1px solid #27272a;" crossorigin="anonymous" />`
+                                                : `<div style="width: 36px; height: 36px; border-radius: 8px; background: #27272a; display: flex; align-items: center; justify-content: center; color: #71717a; font-weight: 700; font-size: 14px;">${safeInitial}</div>`}
+                                            <div style="min-width: 0; flex: 1;">
+                                                <p style="font-weight: 700; color: #ffffff; margin: 0; font-size: 14px; line-height: 1.2; overflow-wrap: break-word; word-break: break-word;">${safeName}</p>
+                                            </div>
+                                        </div>
+                                        <div style="text-align: center;">
+                                            <span style="font-size: 16px; font-weight: 900; color: ${scoreColor};">${entry.score.toLocaleString()}</span>
+                                        </div>
+                                        <div style="display: flex; align-items: center; justify-content: center; gap: 14px; font-size: 13px;">
+                                            <span style="display: flex; align-items: center; gap: 4px;">
+                                                <span>🥇</span>
+                                                <span style="color: #d4d4d8;">${entry.gold.toLocaleString()}</span>
+                                            </span>
+                                            <span style="display: flex; align-items: center; gap: 4px;">
+                                                <span>🥈</span>
+                                                <span style="color: #a1a1aa;">${entry.silver.toLocaleString()}</span>
+                                            </span>
+                                            <span style="display: flex; align-items: center; gap: 4px;">
+                                                <span>🥉</span>
+                                                <span style="color: #71717a;">${entry.bronze.toLocaleString()}</span>
+                                            </span>
+                                        </div>
+                                        <div style="text-align: right;">
+                                            <span style="color: #a1a1aa; font-weight: 600; font-size: 13px;">${entry.totalPodiums.toLocaleString()}</span>
+                                        </div>
+                                    </div>
+                                `
+                            })
+                            .join("")}
+                    </div>
+                </div>
+            `
+
+            await new Promise((resolve) => setTimeout(resolve, 500))
+
+            const measuredHeight = Math.max(exportHeight, tempContainer.scrollHeight)
+            tempContainer.style.height = `${measuredHeight}px`
+
+            const canvas = await html2canvas(tempContainer, {
+                width: EXPORT_WIDTH,
+                height: measuredHeight,
                 scale: 2,
                 backgroundColor: "#09090b",
                 useCORS: true,
                 allowTaint: true,
-                ignoreElements: (node) => node.closest?.('[data-export-ignore="true"]') !== null,
             })
 
             const link = document.createElement("a")
             link.download = `brnd-leaderboard-${new Date().toISOString().split("T")[0]}.png`
             link.href = canvas.toDataURL("image/png")
             link.click()
+
+            document.body.removeChild(tempContainer)
         } catch (error) {
             console.error("Error exporting:", error)
         } finally {
             setExporting(false)
         }
-    }
+     }
 
     return (
-        <div ref={exportRef} className="mt-6 w-full">
+        <div className="mt-6 w-full">
             <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
                     <span className="text-2xl">🏆</span>
@@ -198,7 +248,9 @@ export function WeekLeaderboard({ data, title }: WeekLeaderboardProps) {
                             <div className="col-span-1">
                                 <div className={getRankBadge(entry.rank)}>
                                     <span className="sr-only">{entry.rank}</span>
-                                    <span aria-hidden="true" dangerouslySetInnerHTML={{ __html: getRankSvgMarkup(entry.rank) }} />
+                                    <span aria-hidden="true" className="leading-none">
+                                        {entry.rank}
+                                    </span>
                                 </div>
                             </div>
 
