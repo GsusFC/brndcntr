@@ -1,6 +1,6 @@
 [build]
-  command = "npm install --legacy-peer-deps && npm run build && rm -rf .next/cache"
-  publish = ".next"
+  command = "npm install --legacy-peer-deps && npm run build:dashboard && rm -rf apps/dashboard/.next/cache"
+  publish = "apps/dashboard/.next"
 
 [build.environment]
   NODE_VERSION = "20"

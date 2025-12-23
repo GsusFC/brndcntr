@@ -1,6 +1,6 @@
 [build]
-  command = "npm install --legacy-peer-deps && npm run build"
-  publish = ".next"
+  command = "npm install --legacy-peer-deps && npm run build:landing && rm -rf apps/landing/.next/cache"
+  publish = "apps/landing/.next"
 
 [build.environment]
   NODE_VERSION = "20"
