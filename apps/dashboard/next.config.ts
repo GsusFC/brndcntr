@@ -1,8 +1,19 @@
 import type { NextConfig } from "next";
+import { existsSync } from "fs";
 import path from "path";
 import createNextIntlPlugin from 'next-intl/plugin';
 
 const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
+
+const resolvePackageDir = (pkgName: string): string => {
+  const workspacePath = path.resolve(__dirname, `node_modules/${pkgName}`)
+  if (existsSync(workspacePath)) return workspacePath
+
+  const rootPath = path.resolve(__dirname, `../../node_modules/${pkgName}`)
+  if (existsSync(rootPath)) return rootPath
+
+  throw new Error(`Cannot resolve ${pkgName} from workspace or root node_modules`)
+}
 
 const nextConfig: NextConfig = {
   output: 'standalone',
@@ -26,12 +37,6 @@ const nextConfig: NextConfig = {
   // Webpack config
   webpack: (config, { isServer }) => {
     config.resolve = config.resolve ?? {}
-    config.resolve.modules = [
-      path.resolve(__dirname, "../../node_modules"),
-      path.resolve(__dirname, "node_modules"),
-      ...(config.resolve.modules ?? []),
-    ];
-
     config.resolve.fallback = {
       ...config.resolve.fallback,
       fs: false,
@@ -47,6 +52,8 @@ const nextConfig: NextConfig = {
       'porto/internal': false,
       '@react-native-async-storage/async-storage': false,
       'pino-pretty': false,
+      '@metamask/sdk': resolvePackageDir('@metamask/sdk'),
+      '@walletconnect/ethereum-provider': resolvePackageDir('@walletconnect/ethereum-provider'),
     };
 
     if (!isServer) {
