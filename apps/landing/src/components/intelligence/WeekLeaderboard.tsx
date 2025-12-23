@@ -24,8 +24,59 @@ interface WeekLeaderboardProps {
     title?: string
 }
 
-const EXPORT_WIDTH = 1150
-const EXPORT_HEIGHT = 860
+const getRankSvgMarkup = (rank: number): string => {
+    const segmentRects = {
+        a: { x: 20, y: 6, w: 60, h: 14, rx: 7 },
+        b: { x: 76, y: 18, w: 14, h: 50, rx: 7 },
+        c: { x: 76, y: 78, w: 14, h: 50, rx: 7 },
+        d: { x: 20, y: 124, w: 60, h: 14, rx: 7 },
+        e: { x: 10, y: 78, w: 14, h: 50, rx: 7 },
+        f: { x: 10, y: 18, w: 14, h: 50, rx: 7 },
+        g: { x: 20, y: 66, w: 60, h: 14, rx: 7 },
+    } as const
+
+    type SegmentKey = keyof typeof segmentRects
+
+    const digitSegments: Record<string, SegmentKey[]> = {
+        0: ["a", "b", "c", "d", "e", "f"],
+        1: ["b", "c"],
+        2: ["a", "b", "g", "e", "d"],
+        3: ["a", "b", "g", "c", "d"],
+        4: ["f", "g", "b", "c"],
+        5: ["a", "f", "g", "c", "d"],
+        6: ["a", "f", "g", "e", "c", "d"],
+        7: ["a", "b", "c"],
+        8: ["a", "b", "c", "d", "e", "f", "g"],
+        9: ["a", "b", "c", "d", "f", "g"],
+    }
+
+    const digits = String(rank).split("")
+    const digitWidth = 100
+    const digitHeight = 144
+    const gap = 12
+    const viewBoxWidth = digits.length * digitWidth + Math.max(0, digits.length - 1) * gap
+
+    const svgHeight = 18
+    const svgWidth = Math.max(10, Math.round((svgHeight * viewBoxWidth) / digitHeight))
+
+    const svgContent = digits
+        .map((digit, index) => {
+            const segments = digitSegments[digit] ?? []
+            const xOffset = index * (digitWidth + gap)
+
+            const rects = segments
+                .map((segmentKey) => {
+                    const rect = segmentRects[segmentKey]
+                    return `<rect x="${rect.x}" y="${rect.y}" width="${rect.w}" height="${rect.h}" rx="${rect.rx}" fill="currentColor" />`
+                })
+                .join("")
+
+            return `<g transform="translate(${xOffset} 0)">${rects}</g>`
+        })
+        .join("")
+
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${viewBoxWidth} ${digitHeight}" preserveAspectRatio="xMidYMid meet" style="display:block">${svgContent}</svg>`
+}
 
 export function WeekLeaderboard({ data, title }: WeekLeaderboardProps) {
     const exportRef = useRef<HTMLDivElement>(null)
@@ -75,105 +126,25 @@ export function WeekLeaderboard({ data, title }: WeekLeaderboardProps) {
     }
 
     const handleExportPNG = async () => {
-        if (!exportRef.current) return
+        const element = exportRef.current
+        if (!element) return
         setExporting(true)
 
         try {
-            // Crear un contenedor temporal con el tema claro
-            const tempContainer = document.createElement("div")
-            tempContainer.style.position = "absolute"
-            tempContainer.style.left = "-9999px"
-            tempContainer.style.width = `${EXPORT_WIDTH}px`
-            tempContainer.style.height = `${EXPORT_HEIGHT}px`
-            tempContainer.style.backgroundColor = "#ffffff"
-            tempContainer.style.padding = "32px"
-            tempContainer.style.fontFamily = "system-ui, -apple-system, sans-serif"
-            document.body.appendChild(tempContainer)
+            await document.fonts?.ready
 
-            // Crear el HTML del leaderboard en tema claro (sin título, ajustado al contenido)
-            tempContainer.innerHTML = `
-                <div style="width: 100%; height: 100%; display: flex; flex-direction: column; box-sizing: border-box;">
-                    <div style="border: 1px solid #e4e4e7; border-radius: 16px; overflow: hidden; background: #ffffff;">
-                        <div style="display: grid; grid-template-columns: 70px 1fr 130px 220px 110px; gap: 16px; padding: 18px 28px; background: #fafafa; border-bottom: 1px solid #e4e4e7; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: #71717a;">
-                            <div>Rank</div>
-                            <div>Brand</div>
-                            <div style="text-align: center;">Score</div>
-                            <div style="text-align: center;">Podium Breakdown</div>
-                            <div style="text-align: right;">Total Podiums</div>
-                        </div>
-                        ${entries.map((entry, idx) => `
-                            <div style="display: grid; grid-template-columns: 70px 1fr 130px 220px 110px; gap: 16px; padding: 12px 28px; align-items: center; ${idx < entries.length - 1 ? 'border-bottom: 1px solid #f4f4f5;' : ''} ${entry.rank <= 3 ? 'background: #fafafa;' : ''} box-sizing: border-box;">
-                                <div style="display: flex; align-items: center; justify-content: flex-start;">
-                                    <div style="width: 36px; height: 36px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 900; font-size: 15px; line-height: 36px; text-align: center; box-sizing: border-box; ${
-                                        entry.rank === 1 ? 'background: linear-gradient(135deg, #facc15, #eab308); color: white;' :
-                                        entry.rank === 2 ? 'background: linear-gradient(135deg, #d4d4d8, #a1a1aa); color: white;' :
-                                        entry.rank === 3 ? 'background: linear-gradient(135deg, #f59e0b, #d97706); color: white;' :
-                                        'background: #f4f4f5; color: #71717a; border: 1px solid #e4e4e7;'
-                                    }">${entry.rank}</div>
-                                </div>
-                                <div style="display: flex; align-items: center; gap: 12px;">
-                                    ${entry.imageUrl 
-                                        ? `<img src="${entry.imageUrl}" style="width: 36px; height: 36px; border-radius: 8px; border: 1px solid #e4e4e7;" crossorigin="anonymous" />`
-                                        : `<div style="width: 36px; height: 36px; border-radius: 8px; background: #f4f4f5; display: flex; align-items: center; justify-content: center; color: #a1a1aa; font-weight: 700; font-size: 14px;">${entry.name.charAt(0).toUpperCase()}</div>`
-                                    }
-                                    <div>
-                                        <p style="font-weight: 700; color: #18181b; margin: 0; font-size: 14px;">${entry.name}</p>
-                                        ${entry.channel ? `<p style="font-size: 11px; color: #a1a1aa; margin: 2px 0 0 0;">/${entry.channel}</p>` : ''}
-                                    </div>
-                                </div>
-                                <div style="text-align: center;">
-                                    <span style="font-size: 16px; font-weight: 900; color: ${
-                                        entry.rank === 1 ? '#7c3aed' :
-                                        entry.rank === 2 ? '#6366f1' :
-                                        entry.rank === 3 ? '#8b5cf6' :
-                                        '#18181b'
-                                    };">
-                                        ${entry.score.toLocaleString()}
-                                    </span>
-                                </div>
-                                <div style="display: flex; align-items: center; justify-content: center; gap: 14px; font-size: 13px;">
-                                    <span style="display: flex; align-items: center; gap: 4px;">
-                                        <span>🥇</span>
-                                        <span style="color: #52525b;">${entry.gold.toLocaleString()}</span>
-                                    </span>
-                                    <span style="display: flex; align-items: center; gap: 4px;">
-                                        <span>🥈</span>
-                                        <span style="color: #71717a;">${entry.silver.toLocaleString()}</span>
-                                    </span>
-                                    <span style="display: flex; align-items: center; gap: 4px;">
-                                        <span>🥉</span>
-                                        <span style="color: #a1a1aa;">${entry.bronze.toLocaleString()}</span>
-                                    </span>
-                                </div>
-                                <div style="text-align: right;">
-                                    <span style="color: #71717a; font-weight: 600; font-size: 13px;">${entry.totalPodiums.toLocaleString()}</span>
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-            `
-
-            // Esperar a que las imágenes carguen
-            await new Promise(resolve => setTimeout(resolve, 500))
-
-            const canvas = await html2canvas(tempContainer, {
-                width: EXPORT_WIDTH,
-                height: EXPORT_HEIGHT,
-                scale: 2, // Mayor resolución
-                backgroundColor: "#ffffff",
+            const canvas = await html2canvas(element, {
+                scale: 2,
+                backgroundColor: "#09090b",
                 useCORS: true,
                 allowTaint: true,
+                ignoreElements: (node) => node.closest?.('[data-export-ignore="true"]') !== null,
             })
 
-            // Descargar
             const link = document.createElement("a")
-            link.download = `brnd-leaderboard-${new Date().toISOString().split('T')[0]}.png`
+            link.download = `brnd-leaderboard-${new Date().toISOString().split("T")[0]}.png`
             link.href = canvas.toDataURL("image/png")
             link.click()
-
-            // Limpiar
-            document.body.removeChild(tempContainer)
         } catch (error) {
             console.error("Error exporting:", error)
         } finally {
@@ -182,7 +153,7 @@ export function WeekLeaderboard({ data, title }: WeekLeaderboardProps) {
     }
 
     return (
-        <div className="mt-6 w-full">
+        <div ref={exportRef} className="mt-6 w-full">
             <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
                     <span className="text-2xl">🏆</span>
@@ -195,6 +166,7 @@ export function WeekLeaderboard({ data, title }: WeekLeaderboardProps) {
                     disabled={exporting}
                     variant="secondary"
                     className="bg-white text-black hover:bg-zinc-200 font-bold text-sm"
+                    data-export-ignore="true"
                 >
                     {exporting ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
@@ -205,7 +177,7 @@ export function WeekLeaderboard({ data, title }: WeekLeaderboardProps) {
                 </Button>
             </div>
 
-            <Card ref={exportRef} className="rounded-2xl border-zinc-800 bg-zinc-950 overflow-hidden shadow-2xl">
+            <Card className="rounded-2xl border-zinc-800 bg-zinc-950 overflow-hidden shadow-2xl">
                 {/* Header */}
                 <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-zinc-900/50 border-b border-zinc-800 text-[10px] font-mono uppercase tracking-widest text-zinc-500">
                     <div className="col-span-1">Rank</div>
@@ -225,7 +197,8 @@ export function WeekLeaderboard({ data, title }: WeekLeaderboardProps) {
                             {/* Rank */}
                             <div className="col-span-1">
                                 <div className={getRankBadge(entry.rank)}>
-                                    {entry.rank}
+                                    <span className="sr-only">{entry.rank}</span>
+                                    <span aria-hidden="true" dangerouslySetInnerHTML={{ __html: getRankSvgMarkup(entry.rank) }} />
                                 </div>
                             </div>
 
