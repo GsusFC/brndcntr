@@ -41,13 +41,30 @@ export function DashboardAnalytics() {
     const [isReady, setIsReady] = useState(false)
 
     useEffect(() => {
-        fetch("/api/dashboard/stats")
-            .then(res => res.json())
-            .then(json => {
+        const handleFetch = async () => {
+            try {
+                const res = await fetch("/api/dashboard/stats")
+                const contentType = res.headers.get("content-type") ?? ""
+
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}`)
+                }
+
+                if (!contentType.includes("application/json")) {
+                    const text = await res.text()
+                    throw new Error(`Expected JSON but received ${contentType || "unknown content-type"}: ${text.slice(0, 200)}`)
+                }
+
+                const json = await res.json()
                 if (!json.error) setData(json)
-            })
-            .catch(console.error)
-            .finally(() => setLoading(false))
+            } catch (error) {
+                console.error(error)
+            } finally {
+                setLoading(false)
+            }
+        }
+
+        void handleFetch()
     }, [])
 
     // Delay chart render to ensure container dimensions are calculated
