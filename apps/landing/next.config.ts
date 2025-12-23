@@ -28,8 +28,9 @@ const nextConfig: NextConfig = {
   webpack: (config) => {
     config.resolve = config.resolve ?? {}
     config.resolve.modules = [
+      path.resolve(__dirname, "../../node_modules"),
       path.resolve(__dirname, "node_modules"),
-      ...(config.resolve.modules ?? ["node_modules"]),
+      ...(config.resolve.modules ?? []),
     ];
 
     config.resolve.fallback = {
