@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import path from "path";
 import createNextIntlPlugin from 'next-intl/plugin';
 
 const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
@@ -24,6 +25,12 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ['@prisma/client', '@prisma/client-write', '@prisma/client-indexer'],
   // Webpack config
   webpack: (config, { isServer }) => {
+    config.resolve = config.resolve ?? {}
+    config.resolve.modules = [
+      path.resolve(__dirname, "node_modules"),
+      ...(config.resolve.modules ?? ["node_modules"]),
+    ];
+
     config.resolve.fallback = {
       ...config.resolve.fallback,
       fs: false,
