@@ -5,6 +5,7 @@ import { useTokenGate } from '@/hooks/useTokenGate'
 import { useAppKit } from '@reown/appkit/react'
 import { TOKEN_GATE_CONFIG } from '@/config/tokengate'
 import { Wallet, Lock, RefreshCw, ExternalLink, ShieldX, ShieldCheck } from 'lucide-react'
+import { Skeleton } from "@/components/ui/skeleton"
 
 interface TokenGateProps {
     children: ReactNode
@@ -19,7 +20,6 @@ export function TokenGate({ children }: TokenGateProps) {
         isError,
         isAllowlisted,
         hasTokenAccess,
-        hasFullAccess,
         requiredBalance,
         refetch,
     } = useTokenGate()
@@ -56,9 +56,9 @@ export function TokenGate({ children }: TokenGateProps) {
     if (isLoading) {
         return (
             <div className="flex flex-col items-center justify-center py-16 px-8 text-center">
-                <div className="w-20 h-20 rounded-full bg-zinc-900 border border-zinc-700 flex items-center justify-center mb-6 animate-pulse">
+                <Skeleton className="w-20 h-20 rounded-full bg-zinc-900 border border-zinc-700 flex items-center justify-center mb-6">
                     <RefreshCw className="w-10 h-10 text-zinc-500 animate-spin" />
-                </div>
+                </Skeleton>
                 <h3 className="text-xl font-bold text-white mb-2 font-display uppercase">
                     Verifying Access
                 </h3>

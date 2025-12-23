@@ -2,6 +2,7 @@
 
 import { useAppKit, useAppKitAccount } from '@reown/appkit/react'
 import { Wallet, ChevronDown } from 'lucide-react'
+import { Skeleton } from "@/components/ui/skeleton"
 
 interface ConnectButtonProps {
     className?: string
@@ -22,7 +23,7 @@ export default function ConnectButton({ className = '', variant = 'default' }: C
                 onClick={() => open({ view: 'Account' })}
                 className={`flex items-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-xl transition-all duration-200 ${className}`}
             >
-                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                <Skeleton className="w-2 h-2 rounded-full bg-green-500" />
                 <span className="font-mono text-sm text-zinc-300">
                     {truncateAddress(address)}
                 </span>

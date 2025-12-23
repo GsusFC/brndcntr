@@ -27,6 +27,16 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/no-require-imports": "off",
     },
   },
+
+  {
+    files: [
+      "src/components/brands/ApplyForm.tsx",
+      "src/components/brands/BrandForm.tsx",
+    ],
+    rules: {
+      "@next/next/no-img-element": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

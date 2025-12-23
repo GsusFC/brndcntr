@@ -1,0 +1,30 @@
+version: '3'
+
+services:
+  dashboard:
+    container_name: dashboard
+    build:
+      context: .
+      dockerfile: apps/dashboard/Dockerfile
+      args:
+        - INDEXER_DATABASE_URL=${INDEXER_DATABASE_URL}
+        - NEXT_PUBLIC_REOWN_PROJECT_ID=${NEXT_PUBLIC_REOWN_PROJECT_ID}
+    restart: always
+    ports:
+      - "3010:3000"
+    env_file:
+      - .env
+
+  landing:
+    container_name: landing
+    build:
+      context: .
+      dockerfile: apps/landing/Dockerfile
+      args:
+        - INDEXER_DATABASE_URL=${INDEXER_DATABASE_URL}
+        - NEXT_PUBLIC_REOWN_PROJECT_ID=${NEXT_PUBLIC_REOWN_PROJECT_ID}
+    restart: always
+    ports:
+      - "3011:3000"
+    env_file:
+      - .env

@@ -34,7 +34,7 @@ export default function LoginForm() {
         if (isAuthenticated && profile && !error && !isLoading) {
             handleFarcasterSuccess()
         }
-    }, [isAuthenticated, profile, handleFarcasterSuccess])
+    }, [isAuthenticated, profile, error, isLoading, handleFarcasterSuccess])
 
     const handleGoogleSignIn = async () => {
         setIsLoading(true)

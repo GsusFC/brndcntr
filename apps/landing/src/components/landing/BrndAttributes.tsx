@@ -6,15 +6,15 @@ interface AttributeCardProps {
 }
 
 const AttributeCard = ({ title, description }: AttributeCardProps) => (
-    <div className="relative flex h-full w-full items-center justify-center px-10 py-6 md:p-8">
-        <div className="flex max-w-[320px] md:max-w-[460px] flex-col items-start gap-[17px]">
+    <div className="relative flex h-full w-full min-h-0 items-center justify-center p-6 md:p-5 lg:p-6">
+        <div className="flex min-h-0 max-w-[320px] flex-col items-start gap-3 md:gap-4">
             <h3
-                className="font-druk text-[24px] lg:text-[32px] font-bold leading-[103%] text-white"
+                className="font-druk text-[clamp(18px,2.1vw,32px)] font-bold leading-[103%] text-white"
                 style={{ whiteSpace: 'pre-line' }}
             >
                 {title}
             </h3>
-            <p className="self-stretch font-inter text-[18px] lg:text-[24px] font-normal leading-[103%] text-white">
+            <p className="self-stretch font-inter text-[clamp(12px,1.15vw,20px)] font-normal leading-[103%] text-white">
                 {description}
             </p>
         </div>
@@ -40,6 +40,7 @@ const MediaSlot = ({ src, type = "image", alt = "" }: MediaSlotProps) => (
                     className="h-full w-full object-cover"
                 />
             ) : (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
                     src={src}
                     alt={alt}
@@ -76,10 +77,10 @@ export const BrndAttributes = () => {
             </div>
 
             {/* Grid Layout - Single column mobile, 3 cols desktop */}
-            <div className="grid grid-cols-1 md:grid-cols-3 md:h-screen md:grid-rows-2">
+            <div className="grid grid-cols-1 md:grid-cols-3">
                 {/* Row 1 */}
                 {/* Archive - Black */}
-                <div className="aspect-square md:aspect-auto bg-black">
+                <div className="aspect-square overflow-hidden bg-black">
                     <AttributeCard
                         title={attributes.archive.title}
                         description={attributes.archive.description}
@@ -87,12 +88,12 @@ export const BrndAttributes = () => {
                 </div>
 
                 {/* Media 1 - White */}
-                <div className="aspect-square md:aspect-auto">
-                    <MediaSlot />
+                <div className="aspect-square overflow-hidden">
+                    <MediaSlot src="/images/BRND%20-%20V2%20-1.jpg" alt="BRND attributes media 1" />
                 </div>
 
                 {/* Research - Black */}
-                <div className="aspect-square md:aspect-auto bg-black">
+                <div className="aspect-square overflow-hidden bg-black">
                     <AttributeCard
                         title={attributes.research.title}
                         description={attributes.research.description}
@@ -101,12 +102,12 @@ export const BrndAttributes = () => {
 
                 {/* Row 2 */}
                 {/* Media 2 - White */}
-                <div className="aspect-square md:aspect-auto">
-                    <MediaSlot />
+                <div className="aspect-square overflow-hidden">
+                    <MediaSlot src="/images/BRND%20-%20V2%20-%202.jpg" alt="BRND attributes media 2" />
                 </div>
 
                 {/* Catalyst - Black */}
-                <div className="aspect-square md:aspect-auto bg-black">
+                <div className="aspect-square overflow-hidden bg-black">
                     <AttributeCard
                         title={attributes.catalyst.title}
                         description={attributes.catalyst.description}
@@ -114,8 +115,8 @@ export const BrndAttributes = () => {
                 </div>
 
                 {/* Media 3 - White */}
-                <div className="aspect-square md:aspect-auto">
-                    <MediaSlot />
+                <div className="aspect-square overflow-hidden">
+                    <MediaSlot src="/images/BRND%20-%20V2%20-%203.jpg" alt="BRND attributes media 3" />
                 </div>
             </div>
         </section>

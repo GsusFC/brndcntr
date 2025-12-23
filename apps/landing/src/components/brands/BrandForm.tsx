@@ -376,6 +376,7 @@ export function BrandForm({
                             <div className="shrink-0">
                                 <div className="w-12 h-12 rounded-full bg-zinc-900 border border-zinc-800 overflow-hidden flex items-center justify-center">
                                     {formData.imageUrl ? (
+                                        // eslint-disable-next-line @next/next/no-img-element
                                         <img
                                             src={formData.imageUrl}
                                             alt="Preview"
