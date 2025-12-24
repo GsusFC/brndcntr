@@ -1,15 +1,28 @@
 import { PrismaClient } from '@prisma/client'
 
-const prismaWriteClientSingleton = () => {
-    return new PrismaClient()
-}
-
 declare global {
-    var prismaWriteGlobal: undefined | ReturnType<typeof prismaWriteClientSingleton>
+    var prismaWriteGlobal: PrismaClient | undefined
 }
 
-const prismaWrite = globalThis.prismaWriteGlobal ?? prismaWriteClientSingleton()
+const getPrismaWriteClient = (): PrismaClient => {
+    const existing = globalThis.prismaWriteGlobal
+    if (existing) return existing
+
+    const client = new PrismaClient()
+
+    if (process.env.NODE_ENV !== 'production') globalThis.prismaWriteGlobal = client
+    return client
+}
+
+const prismaWrite = new Proxy({} as PrismaClient, {
+    get(_target, prop) {
+        if (!process.env.MYSQL_DATABASE_URL) {
+            throw new Error('MYSQL_DATABASE_URL is not defined')
+        }
+
+        const client = getPrismaWriteClient() as unknown as Record<PropertyKey, unknown>
+        return client[prop]
+    },
+})
 
 export default prismaWrite
-
-if (process.env.NODE_ENV !== 'production') globalThis.prismaWriteGlobal = prismaWrite

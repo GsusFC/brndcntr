@@ -10,7 +10,7 @@
     "prisma:generate:all": "npm run prisma:generate && npm run prisma:generate:write && npm run prisma:generate:indexer",
     "dev": "next dev",
     "prebuild": "npm run prisma:generate:all",
-    "build": "next build",
+    "build": "node ../../node_modules/next/dist/bin/next build",
     "start": "next start",
     "lint": "eslint"
   },

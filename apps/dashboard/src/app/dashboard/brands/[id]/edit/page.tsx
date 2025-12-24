@@ -7,15 +7,34 @@ export const dynamic = 'force-dynamic'
 export default async function EditBrandPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params
 
-    const brand = await prisma.brand.findUnique({
-        where: { id: Number(id) },
-    })
+    let brand: Awaited<ReturnType<typeof prisma.brand.findUnique>> = null
+    let categories: Awaited<ReturnType<typeof prisma.category.findMany>> = []
+    let dbError = false
+
+    try {
+        ;[brand, categories] = await Promise.all([
+            prisma.brand.findUnique({
+                where: { id: Number(id) },
+            }),
+            prisma.category.findMany(),
+        ])
+    } catch {
+        dbError = true
+    }
+
+    if (dbError) {
+        return (
+            <div className="w-full p-8 text-center rounded-xl border border-yellow-900/50 bg-yellow-950/20">
+                <p className="text-yellow-400 font-mono text-sm">
+                    ⚠️ Could not load brand editor. Database connection issue.
+                </p>
+            </div>
+        )
+    }
 
     if (!brand) {
         notFound()
     }
-
-    const categories = await prisma.category.findMany()
 
     return (
         <div className="w-full">

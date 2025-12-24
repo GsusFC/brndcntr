@@ -11,6 +11,13 @@ interface BrandInfo {
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
+    if (!process.env.MYSQL_DATABASE_URL) {
+        return NextResponse.json(
+            { error: "MySQL is not configured" },
+            { status: 503 }
+        )
+    }
+
     try {
         const { searchParams } = new URL(request.url)
         const brandIds = searchParams.get("brandIds")?.split(",").map(Number).filter(Boolean) || []

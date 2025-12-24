@@ -12,10 +12,24 @@ import { fetchChannelByIdCached, fetchUserByUsernameCached } from "@/lib/farcast
 import { getIndexerBrandById } from "@/lib/seasons"
 import prismaIndexer from "@/lib/prisma-indexer"
 import { getUsersMetadata } from "@/lib/seasons/enrichment/users"
+import type { Prisma } from "@prisma/client"
 
 export const dynamic = 'force-dynamic'
 
 const PAGE_SIZE = 50
+
+type MysqlBrand = Prisma.BrandGetPayload<{
+    include: {
+        category: true
+        tags: { include: { tag: true } }
+    }
+}>
+
+type MysqlBrandTag = MysqlBrand["tags"][number]
+
+const hasTag = (
+    t: MysqlBrandTag
+): t is MysqlBrandTag & { tag: NonNullable<MysqlBrandTag["tag"]> } => Boolean(t.tag)
 
 function parseBrandIds(brandIdsJson: string): number[] {
     try {
@@ -50,17 +64,20 @@ export default async function BrandPage({ params, searchParams }: BrandPageProps
 
     if (isNaN(brandId)) notFound()
 
-    // Fetch Brand from MySQL (metadata) and Indexer (metrics) in parallel
-    const [mysqlBrand, indexerBrand] = await Promise.all([
-        prisma.brand.findUnique({
+    let mysqlBrand: MysqlBrand | null = null
+    try {
+        mysqlBrand = await prisma.brand.findUnique({
             where: { id: brandId },
             include: {
                 category: true,
-                tags: { include: { tag: true } }
-            }
-        }),
-        getIndexerBrandById(brandId),
-    ])
+                tags: { include: { tag: true } },
+            },
+        })
+    } catch {
+        mysqlBrand = null
+    }
+
+    const indexerBrand = await getIndexerBrandById(brandId)
 
     if (!mysqlBrand && !indexerBrand) notFound()
 
@@ -74,7 +91,7 @@ export default async function BrandPage({ params, searchParams }: BrandPageProps
         profile: mysqlBrand?.profile,
         description: mysqlBrand?.description,
         category: mysqlBrand?.category,
-        tags: mysqlBrand?.tags ?? [],
+        tags: mysqlBrand?.tags ?? ([] as MysqlBrand["tags"]),
         // Indexer metrics
         allTimePoints: indexerBrand?.allTimePoints ?? 0,
         allTimeRank: indexerBrand?.allTimeRank,
@@ -290,7 +307,7 @@ export default async function BrandPage({ params, searchParams }: BrandPageProps
                     </p>
                     {brand.tags && brand.tags.length > 0 && (
                         <div className="flex flex-wrap gap-2 mt-6 pt-6 border-t border-zinc-900">
-                            {brand.tags.filter(t => t.tag).map((t) => (
+                            {brand.tags.filter(hasTag).map((t) => (
                                 <Badge key={t.tag!.id} variant="outline" className="bg-zinc-900 border-zinc-800 text-zinc-400">
                                     {t.tag!.name}
                                 </Badge>

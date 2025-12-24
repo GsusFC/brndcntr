@@ -2,17 +2,57 @@ import prisma from "@/lib/prisma"
 import { ApplicationsTable } from "@/components/dashboard/ApplicationsTable"
 import { Suspense } from "react"
 import { Skeleton } from "@/components/ui/skeleton"
+import type { Prisma } from "@prisma/client"
 
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
 
 export default async function ApplicationsPage() {
-    // Fetch pending applications (banned = 1)
-    const applications = await prisma.brand.findMany({
-        where: { banned: 1 },
-        include: { category: true },
-        orderBy: { createdAt: 'desc' }
-    })
+    type ApplicationRow = Prisma.BrandGetPayload<{
+        select: {
+            id: true
+            name: true
+            description: true
+            url: true
+            warpcastUrl: true
+            imageUrl: true
+            createdAt: true
+            category: { select: { id: true; name: true } }
+        }
+    }>
+
+    let applications: ApplicationRow[] = []
+    let dbError = false
+
+    try {
+        // Fetch pending applications (banned = 1)
+        applications = await prisma.brand.findMany({
+            where: { banned: 1 },
+            orderBy: { createdAt: 'desc' },
+            select: {
+                id: true,
+                name: true,
+                description: true,
+                url: true,
+                warpcastUrl: true,
+                imageUrl: true,
+                createdAt: true,
+                category: { select: { id: true, name: true } },
+            },
+        })
+    } catch {
+        dbError = true
+    }
+
+    if (dbError) {
+        return (
+            <div className="w-full p-8 text-center rounded-xl border border-yellow-900/50 bg-yellow-950/20">
+                <p className="text-yellow-400 font-mono text-sm">
+                    ⚠️ Could not load applications. Database connection issue.
+                </p>
+            </div>
+        )
+    }
 
     return (
         <div className="w-full">

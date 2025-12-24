@@ -21,6 +21,8 @@ const staticBrands = brandsSnapshot as Record<string, { name: string; imageUrl: 
 let brandCache: BrandCache | null = null
 let cacheTimestamp: number = 0
 const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutos
+let mysqlUnavailableUntilMs = 0
+const MYSQL_BACKOFF_MS = 10 * 60 * 1000
 
 /**
  * Obtiene metadata de brands desde MySQL (con cache en memoria)
@@ -37,6 +39,24 @@ async function loadBrandCache(brandIds: number[]): Promise<BrandCache> {
   const missingIds = uniqueBrandIds.filter((id) => !brandCache!.has(id))
 
   if (missingIds.length > 0) {
+    const nowMs = Date.now()
+
+    if (!process.env.MYSQL_DATABASE_URL || nowMs < mysqlUnavailableUntilMs) {
+      for (const id of missingIds) {
+        const staticBrand = staticBrands[String(id)]
+        if (staticBrand) {
+          brandCache!.set(id, {
+            id,
+            name: staticBrand.name,
+            imageUrl: staticBrand.imageUrl,
+            channel: staticBrand.channel,
+          })
+        }
+      }
+
+      return brandCache
+    }
+
     try {
       const brands = await prisma.brand.findMany({
         where: {
@@ -60,6 +80,7 @@ async function loadBrandCache(brandIds: number[]): Promise<BrandCache> {
         })
       }
     } catch (error) {
+      mysqlUnavailableUntilMs = nowMs + MYSQL_BACKOFF_MS
       console.warn("[brands.ts] MySQL unavailable, using static snapshot:", error instanceof Error ? error.message : error)
       // Use static snapshot as fallback
       for (const id of missingIds) {

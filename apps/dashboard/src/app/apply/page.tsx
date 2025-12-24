@@ -4,8 +4,53 @@ import Link from "next/link"
 import Image from "next/image"
 import { TOKEN_GATE_CONFIG } from "@/config/tokengate"
 
+export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
+
 export default async function ApplyPage() {
-    const categories = await prisma.category.findMany()
+    let categories: { id: number; name: string }[] = []
+    let loadError = false
+
+    try {
+        categories = await prisma.category.findMany({
+            select: { id: true, name: true },
+        })
+    } catch {
+        loadError = true
+    }
+
+    if (loadError || categories.length === 0) {
+        return (
+            <div className="min-h-screen bg-black text-white font-sans selection:bg-white selection:text-black">
+                <div className="container mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8">
+                    <div className="text-center mb-12">
+                        <Link href="/" className="inline-block mb-8">
+                            <Image
+                                src="/logo.svg"
+                                alt="BRND Logo"
+                                width={160}
+                                height={56}
+                                className="h-14 w-auto"
+                                priority
+                            />
+                        </Link>
+                        <h2 className="text-3xl font-bold tracking-tight sm:text-4xl font-display uppercase mb-4">
+                            Apply for Listing
+                        </h2>
+                        <p className="text-lg text-zinc-400 font-mono max-w-2xl mx-auto">
+                            Applications are temporarily unavailable.
+                        </p>
+                    </div>
+
+                    <div className="w-full p-8 text-center rounded-2xl border border-yellow-900/50 bg-yellow-950/20">
+                        <p className="text-yellow-400 font-mono text-sm">
+                            ⚠️ Could not load categories. Database connection issue.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        )
+    }
 
     return (
         <div className="min-h-screen bg-black text-white font-sans selection:bg-white selection:text-black">
