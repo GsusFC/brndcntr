@@ -1,11 +1,21 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-if (!process.env.GEMINI_API_KEY) {
-    throw new Error("GEMINI_API_KEY is not set");
-}
+let cachedModel: ReturnType<GoogleGenerativeAI["getGenerativeModel"]> | null = null;
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+const getModel = () => {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey || !apiKey.trim()) {
+        throw new Error("GEMINI_API_KEY is not set");
+    }
+
+    if (cachedModel) {
+        return cachedModel;
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    cachedModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    return cachedModel;
+};
 
 export async function generateSQLQuery(userQuestion: string, schema: string) {
     const prompt = `You are an expert SQL analyst for BRND.
@@ -107,6 +117,7 @@ VISUALIZATION RULES:
 USER QUESTION: ${userQuestion}`;
 
     try {
+        const model = getModel();
         const result = await model.generateContent(prompt);
         const text = result.response.text();
         const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/) || text.match(/```\n([\s\S]*?)\n```/) || text.match(/\{[\s\S]*\}/);
@@ -173,6 +184,7 @@ STYLE RULES:
 Generate the complete analysis now:`;
 
     try {
+        const model = getModel();
         const result = await model.generateContent(prompt);
         return result.response.text();
     } catch (error) {
@@ -197,6 +209,7 @@ export async function formatQueryResults(question: string, results: Record<strin
 ${JSON.stringify(serializedResults.slice(0, 5), null, 2)} `;
 
     try {
+        const model = getModel();
         const result = await model.generateContent(prompt);
         return result.response.text();
     } catch {

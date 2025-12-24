@@ -5,6 +5,13 @@ import { DATABASE_SCHEMA } from "@/lib/intelligence/schema";
 
 export async function POST(request: NextRequest) {
     try {
+        if (!process.env.GEMINI_API_KEY?.trim()) {
+            return NextResponse.json(
+                { error: "AI Service Error: GEMINI_API_KEY is not set" },
+                { status: 503 }
+            );
+        }
+
         const { question } = await request.json();
 
         if (!question || typeof question !== "string") {
