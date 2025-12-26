@@ -6,6 +6,11 @@
     "apps/*",
     "packages/*"
   ],
+  "dependencies": {
+    "next": "15.3.6",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
