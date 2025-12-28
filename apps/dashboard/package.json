@@ -8,11 +8,11 @@
     "prisma:generate:indexer": "node -r dotenv/config -e \"process.env.INDEXER_DATABASE_URL ||= 'postgresql://user:pass@localhost:5432/indexer'; require('child_process').execSync('prisma generate --schema=prisma/schema.indexer.prisma', { stdio: 'inherit' })\"",
     "prisma:pull:indexer": "node -r dotenv/config -e \"if(!process.env.INDEXER_DATABASE_URL) throw new Error('INDEXER_DATABASE_URL is not defined')\" && prisma db pull --schema=prisma/schema.indexer.prisma",
     "prisma:generate:all": "npm run prisma:generate && npm run prisma:generate:write && npm run prisma:generate:indexer",
-    "dev": "node ../../node_modules/next/dist/bin/next dev",
+    "dev": "next dev",
     "predev": "npm run prisma:generate:all",
     "prebuild": "npm run prisma:generate:all",
-    "build": "node ../../node_modules/next/dist/bin/next build",
-    "start": "node ../../node_modules/next/dist/bin/next start",
+    "build": "next build",
+    "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {

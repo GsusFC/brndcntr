@@ -1,11 +1,10 @@
 [build]
-  command = "npm install --legacy-peer-deps && npm run build:dashboard && rm -rf apps/dashboard/.next/cache"
+  command = "cd apps/dashboard && npm ci --legacy-peer-deps && npm run build && rm -rf .next/cache"
   publish = "apps/dashboard/.next"
 
 [build.environment]
   NODE_VERSION = "20"
   NPM_FLAGS = "--legacy-peer-deps"
-  NPM_CONFIG_INSTALL_STRATEGY = "nested"
 
 [functions]
   included_files = ["node_modules/@prisma/client-write/**", "node_modules/@prisma/client-indexer/**", "node_modules/.prisma/**"]
