@@ -7,9 +7,9 @@
   NPM_FLAGS = "--legacy-peer-deps"
 
 [functions]
-  external_node_modules = ["next", "@next/env", "@swc/counter", "@swc/helpers", "busboy", "caniuse-lite", "postcss", "styled-jsx", "@prisma/client", "@prisma/client-write", "@prisma/client-indexer"]
+  external_node_modules = ["next", "react", "react-dom", "scheduler", "@next/env", "@swc/counter", "@swc/helpers", "busboy", "caniuse-lite", "postcss", "styled-jsx", "@prisma/client", "@prisma/client-write", "@prisma/client-indexer"]
   node_bundler = "zisi"
-  included_files = ["node_modules/next/**", "node_modules/@next/env/**", "node_modules/@swc/counter/**", "node_modules/@swc/helpers/**", "node_modules/busboy/**", "node_modules/caniuse-lite/**", "node_modules/postcss/**", "node_modules/styled-jsx/**", "node_modules/@prisma/client-write/**", "node_modules/@prisma/client-indexer/**", "node_modules/.prisma/**"]
+  included_files = ["node_modules/next/**", "node_modules/react/**", "node_modules/react-dom/**", "node_modules/scheduler/**", "node_modules/@next/env/**", "node_modules/@swc/counter/**", "node_modules/@swc/helpers/**", "node_modules/busboy/**", "node_modules/caniuse-lite/**", "node_modules/postcss/**", "node_modules/styled-jsx/**", "node_modules/@prisma/client-write/**", "node_modules/@prisma/client-indexer/**", "node_modules/.prisma/**"]
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
