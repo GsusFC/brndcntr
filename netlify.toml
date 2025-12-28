@@ -1,4 +1,4 @@
 [functions]
-  external_node_modules = ["next", "@prisma/client", "@prisma/client-write", "@prisma/client-indexer"]
+  external_node_modules = ["next", "styled-jsx", "@prisma/client", "@prisma/client-write", "@prisma/client-indexer"]
   node_bundler = "zisi"
-  included_files = ["node_modules/next/**", "node_modules/@prisma/client-write/**", "node_modules/@prisma/client-indexer/**", "node_modules/.prisma/**"]
+  included_files = ["node_modules/next/**", "node_modules/styled-jsx/**", "node_modules/@prisma/client-write/**", "node_modules/@prisma/client-indexer/**", "node_modules/.prisma/**"]
